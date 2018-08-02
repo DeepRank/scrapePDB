@@ -1,4 +1,5 @@
 #! /usr/bin/env python
+import os
 import pypdb
 import multiprocessing
 from tqdm import tqdm
@@ -62,10 +63,6 @@ class PDBselect(object):
         self.outfile = outfile
         self.out_failed_file = outfailedfile
 
-        if self.nproc > 1:
-            self._tmpfiles = ['_tmp_%03d' %i for i in range(self.nproc)]
-            self._tmpfailedfiles = ['_tmp_failed_%03d' %i for i in range(self.nproc)]
-
         self.dict_cond = {
         'method': method, 'resolution': np.float('Inf') if min_res is None else min_res,
         'number_of_entity': number_of_entity, 'type': types,
@@ -101,7 +98,44 @@ class PDBselect(object):
         # save results
         print('PDBselect -> %04d complexes found' %(len(self.results['ids'])))
         print('PDBselect -> Saving results in :', self.outfile)
-        pickle.dump(self.results,open(self.outfile,'wb'))
+        self.save_pkl()
+
+    def save_pkl(self):
+
+        if not os.path.isfile(self.outfile):
+            with open(self.outfile,'wb') as f:
+                pickle.dump(self.results,f)
+
+        else:
+            with open(self.outfile,'rb') as f:
+                old_res = pickle.load(f)
+
+            if self.compatible_out(self.results,old_res):
+
+                self.results['ids'] = old_res['ids'] + self.results['ids']
+                self.results['start'] = min(self.results['start'],old_res['start'])
+                self.results['size'] = self.results['size'] + old_res['size']
+
+                with open(self.outfile,'wb') as f:
+                    pickle.dump(self.results,f)
+
+            else:
+
+                print('PDBselect -> New search not compatible with existing data in %s' %self.outfile)
+                a,b = self.outfile.split('.')
+                newname = a+'_new.'+b
+                print('PDBselect -> Saving results in :', newname )
+                with open(newname,'wb') as f:
+                    pickle.dump(self.results,f)
+
+    @staticmethod
+    def compatible_out(new,old):
+        check = []
+        keys = ['method', 'resolution', 'number_of_entity', 'type', 'len_min', 'len_max']
+        for k in keys:
+            check.append(new[k]==old[k])
+        return np.all(check)
+
 
     @staticmethod
     def get_all_pdb(start=0,size=-1):
