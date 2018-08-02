@@ -90,7 +90,10 @@ class PDBselect(object):
             print('PDBselect -> Processing the files on %d procs' %self.nproc)
             pool = multiprocessing.Pool(self.nproc)
             part_process = partial(self._select_pdb,dict_cond=self.dict_cond)
-            self.results['ids'] = pool.map(part_process,allpdbs)
+            if self.tqdm:
+                self.results['ids'] = list(tqdm(pool.imap(part_process,allpdbs), total=len(allpdbs)))
+            else:
+                self.results['ids'] = pool.map(part_process,allpdbs)
 
         # remove the Nones
         self.results['ids'] = list(filter(None,self.results['ids']))
