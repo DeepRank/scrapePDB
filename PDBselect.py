@@ -185,6 +185,8 @@ if __name__ == "__main__":
     parser.add_argument('--types', nargs = '+', type=str, default=['protein'], help='type of polymers')
     parser.add_argument('--len_min',type = int, default=50,help='Minimum number of residues')
     parser.add_argument('--len_max',type = int, default=None,help='Maximum number of residues')
+    parser.add_argument('--outfile',type = str, default='pdblist.pkl',help='Name of the output file')
+
 
     parser.add_argument('--tqdm',type = bool, default=True,help='use tqdm to monitor progress')
 
@@ -193,6 +195,7 @@ if __name__ == "__main__":
     pdbxt = PDBselect(start = args.start, size = args.size, nproc = args.nproc,tqdm=args.tqdm,
                  method=args.method, min_res=args.min_res,
                  number_of_entity=args.number_of_entity, types=args.types,
-                 len_min = args.len_min, len_max = args.len_max)
+                 len_min = args.len_min, len_max = args.len_max,
+                 outfile=args.outfile)
 
     pdbxt.fetch()
