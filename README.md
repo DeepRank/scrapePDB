@@ -1,6 +1,27 @@
 # PDB database scrapper for dataset creation
 
-## Installation
+## Introduction
+
+No installation is required for the moment.
+
+The creation of a dataset is a 4 step process detailled in the following:
+
+#### 1 PDBselect : Select Potential PDB
+
+Here we simly select all the PDBs that respect a set of conditions (number, types, length of entities in the strucrure)
+
+#### 2 PDBsim : Identify PDBs with a common entity
+
+Here we identify all the PDBs that share a common entity. This is done via the sequence similarity of the chains and is therefore defined by the sequence percentage below which two chains are considered idnetical
+
+#### 3 PDBunique : Identify unique PDBs 
+
+Here we go through all PDBs sharing a common entity and extract unique PDBs entries. This is done by creating the protein interaction graph and selecting a single PDB for each edge of the this graph.
+
+#### 4 PDBdowload : download the dataset
+
+Just dowload the unique PDBs we have selected
+
 
 ## PDBselect
 
