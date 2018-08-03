@@ -36,5 +36,12 @@ will identfy all the pdbs in `pdblist.pkl` that contains one common chain with a
 
 The program outputs a `networkX` graph file where each node corresponds to a given PDB ID and where nodes are connected if they share a common chain. This graph can be vizualized with the embedded `plotly` script.
 
-
 ![alt-text](./seqsim.gif)
+
+## PDBunique
+
+Now that we know which PDBs share a common cluster we can select unique pdbs with `PDBunique`. This program analyzes the cluster of PDB sharing a common chain and extract only the entries that are different from each other. This is achieved by computing the protein cluster graphs as shown below.
+
+![alt-text](./protclust.gif)
+
+In this graph each node represent a single chain and each edge shows the interaction of two distinct chains. Hovering over the nodes will show the name of the chains and the PDB entries where it is found. Hovering over the edges will show the PDB Ids that contains both chains the edge is linking.
