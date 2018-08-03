@@ -81,6 +81,7 @@ class SeqSimGraph(object):
         polymer = pypdb.get_all_info(pdb)['polymer']
         chain_labels = []
         for p in polymer:
+
             chain = p['chain']
             if not isinstance(chain,list):
                 chain = [chain]
@@ -183,8 +184,6 @@ class SeqSimGraph(object):
         # for node, adjacencies in enumerate(adj_list):
         #     node_trace['marker']['color'].append(len(adjacencies))
         #     node_info = '# of connections: '+str(len(adjacencies))
-
-
 
         fig = go.Figure(data=[node_trace, edge_trace],
                      layout=go.Layout(

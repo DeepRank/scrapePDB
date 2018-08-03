@@ -2,28 +2,24 @@ import pypdb
 import multiprocessing
 from tqdm import tqdm
 import numpy as np
-from time import time
 import networkx as nx
-import matplotlib.pyplot as plt
-from plot_graph_plotly2 import plot_graph
-from plot_graph_plotly import plot_graph_dimer
 from collections import namedtuple
-from tqdm import tqdm
 import pickle
 
 
-class PDBselect(object):
+class PDBunique(object):
 
-    def __init__(self,seqsimgraph):
+    def __init__(self,seqsimgraph,cluster=None):
 
         # load the graph
         self.ssg = nx.read_gpickle(seqsimgraph)
         self.percent = self.ssg.percent
+        self.cluster_index = cluster
 
         # identify clusters
         self.clusters = list(nx.algorithms.connected_components(self.ssg))
 
-   def get_unique_entries(self):
+    def get_unique_entries(self):
 
         # number of custers
         num_cluster = len(self.clusters)
@@ -73,40 +69,49 @@ class PDBselect(object):
 
         for pdb in tqdm(cluster):
 
-            # get the info and chain labels
-            info = pypdb.get_all_info(pdb)
-            chains = [info['polymer'][0]['chain']['@id'],info['polymer'][1]['chain']['@id']]
-            names = [None,None]
+            # get the polymer ifos
+            polymer = pypdb.get_all_info(pdb)['polymer']
+
+            # get the chain labels
+            chain_labels, chain_entity = [], []
+            for ip,p in enumerate(polymer):
+
+                chain = p['chain']
+
+                # only conserve the first chain
+                if isinstance(chain,list):
+                    chain = chain[0]
+
+                chain_labels.append(chain['@id'])
+                chain_entity.append(ip)
+
+            # init the names
+            names = [None]*len(chain_labels)
 
             # enumerate chans
-            for ic,chain in enumerate(chains):
+            for ic,(chain,ip) in enumerate(zip(chain_labels,chain_entity)):
 
                 # pdb.chain ID
-                c = pdb+'.'+chain
+                id_chain = pdb+'.'+chain
 
                 # add the pdb.chain ID to the general dict
                 # {pdb.chain: prot name}
-                if c not in dict_chains:
+                if id_chain not in dict_chains:
 
-                    # use the macromolecule name
-                    if 'macroMolecule' in info['polymer'][ic]:
-                        if isinstance(info['polymer'][ic]['macroMolecule'],list):
-                            names[ic] = info['polymer'][ic]['macroMolecule'][0]['@name']
-                        else:
-                            names[ic] = info['polymer'][ic]['macroMolecule']['@name']
-
-                    # or the polymer description name
-                    elif 'polymerDescription' in info['polymer'][ic]:
-                        if isinstance(info['polymer'][ic]['polymerDescription'],list):
-                            names[ic] = info['polymer'][ic]['polymerDescription'][0]['@description']
-                        else:
-                            names[ic] = info['polymer'][ic]['polymerDescription']['@description']
+                    # use the macromolecule or polymer description name
+                    for name_option,tag in zip(['macroMolecule','polymerDescription'],['@name','@description']):
+                        if name_option in polymer[ip]:
+                            if isinstance(polymer[ip][name_option],list):
+                                names[ic] = polymer[ip][name_option][0][tag]
+                            else:
+                                names[ic] = polymer[ip][name_option][tag]
+                            break
 
                     # add the pdb.chain to the dict
-                    dict_chains[c] = names[ic]
+                    dict_chains[id_chain] = names[ic]
 
                     # get the seq similarity of the chain
-                    cluster,_ = get_seq_cluster_percent(c,percent=percent)
+                    cluster,_ = pypdb.get_seq_cluster_percent(id_chain,percent=percent)
                     cluster = cluster['pdbChain']
 
                     # add all the chains with similar seq
@@ -119,7 +124,7 @@ class PDBselect(object):
 
                 # reuse the previously defined entry
                 else:
-                    names[ic] = dict_chains[c]
+                    names[ic] = dict_chains[id_chain]
 
                 # add the node to the dict of Node namedtuples
                 key = names[ic]
@@ -147,3 +152,103 @@ class PDBselect(object):
             g.add_edge(edge_key[0],edge_key[1],weight=edge_val.weight,txt=edge_val.txt)
 
         return g
+
+
+def plot_graph(G,fname):
+
+
+    import plotly.plotly as py
+    import plotly.graph_objs as go
+
+    pos = nx.spring_layout(G)
+
+    trace3_list = []
+    middle_node_trace = go.Scatter(x=[],y=[],text=[],mode='markers',
+                           hoverinfo='text',marker=go.Marker(opacity=0))
+
+    # edge_trace = go.Scatter(
+    #     x=[],
+    #     y=[],
+    #     line=dict(width=0.5,color='#888'),
+    #     hoverinfo='text',
+    #     mode='lines',
+    #     text = [])
+
+    for edge in G.edges():
+
+        trace3 = go.Scatter(x=[],y=[],text=[],mode='lines',
+                            line=go.Line(color='rgb(210,210,210)',width = G.edges[edge[0],edge[1]]['weight']))
+
+        x0, y0 = pos[edge[0]]
+        x1, y1 = pos[edge[1]]
+        trace3['x'] += [x0, x1, None]
+        trace3['y'] += [y0, y1, None]
+        trace3_list.append(trace3)
+
+        middle_node_trace['x'].append((x0+x1)/2)
+        middle_node_trace['y'].append((y0+y1)/2)
+        middle_node_trace['text'].append(G.edges[edge[0],edge[1]]['txt'])
+
+    node_trace = go.Scatter(
+        x=[],
+        y=[],
+        text=[],
+        mode='markers',
+        hoverinfo='text',
+        marker=dict(
+            showscale=True,
+            # colorscale options
+            # 'Greys' | 'Greens' | 'Bluered' | 'Hot' | 'Picnic' | 'Portland' |
+            # Jet' | 'RdBu' | 'Blackbody' | 'Earth' | 'Electric' | 'YIOrRd' | 'YIGnBu'
+            colorscale='YIGnBu',
+            reversescale=True,
+            color=[],
+            size=10,
+            colorbar=dict(
+                thickness=15,
+                title='Node Connections',
+                xanchor='left',
+                titleside='right'
+            ),
+            line=dict(width=2)))
+
+    for node in G.nodes():
+        x, y = pos[node]
+        node_trace['x'].append(x)
+        node_trace['y'].append(y)
+        node_trace['text'].append(''.join(node) + '<br>'+ G.nodes[node]['txt'])
+        node_trace['marker']['color'].append(min(G.nodes[node]['number'],10))
+
+    fig = go.Figure(data=[*trace3_list, middle_node_trace, node_trace],
+                 layout=go.Layout(
+                    title='<br>Network graph made with Python',
+                    titlefont=dict(size=16),
+                    showlegend=False,
+                    hovermode='closest',
+                    margin=dict(b=20,l=5,r=5,t=40),
+                    annotations=[ dict(
+                        text="Python code: <a href='https://plot.ly/ipython-notebooks/network-graphs/'> https://plot.ly/ipython-notebooks/network-graphs/</a>",
+                        showarrow=False,
+                        xref="paper", yref="paper",
+                        x=0.005, y=-0.002 ) ],
+                    xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                    yaxis=dict(showgrid=False, zeroline=False, showticklabels=False)))
+
+    py.iplot(fig, filename=fname)
+
+
+
+if __name__ == "__main__":
+
+    import argparse
+
+    parser = argparse.ArgumentParser('PDBdatabase scraper')
+
+    parser.add_argument('ssg',type = str, help='Structure Similarity graph')
+    parser.add_argument('--cluster', type = int, default = 0, help='Index of the cluster to analyze')
+    args = parser.parse_args()
+
+
+    pdb = PDBunique(args.ssg,cluster=args.cluster)
+    graph = pdb.get_protein_cluster_graph(pdb.clusters[args.cluster],pdb.percent)
+    plot_graph(graph,'protein_cluster%d' %(args.cluster))
