@@ -18,7 +18,7 @@ For example:
 
 ```
 ./PDBselect --method xray --types protein --number_of_entity 2 --len_min 10 --len_max 500 --nproc 10
-``
+```
 
 selects all the PDB containging 2 proteins containing between 10 and 500 residues each and charaterized with X-ray. The program write a pickle file containing the search parameter and the the corresponding PDB IDs.
 
