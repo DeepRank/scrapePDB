@@ -78,7 +78,13 @@ class PDBselect(object):
 
     def fetch(self):
 
-        allpdbs = self.get_all_pdb(self.start,self.size)
+        if self.dict_cond['type'] == ['protein']:
+            query = pypdb.make_query(self.dict_cond['number_of_entity'],'NumberOfEntitiesQuery')
+            allpdbs = pypdb.do_search(query)
+        else:
+            allpdbs = self.get_all_pdb(self.start,self.size)
+
+        print('PDBselect -> %d pdb retreived from the database' %len(allpdbs))
 
         if self.nproc == 1:
             self.results['ids'] = self.process_pdb(allpdbs)
@@ -143,7 +149,6 @@ class PDBselect(object):
                 allpdbs = pypdb.get_all()[start:start+size]
             else:
                 allpdbs = pypdb.get_all()[start:-1]
-            print('PDBselect -> %d pdb retreived from the database' %len(allpdbs))
             return allpdbs
 
     def process_pdb(self,pdb_list):
