@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import pypdb
 import multiprocessing
 from tqdm import tqdm
@@ -9,12 +10,14 @@ import pickle
 
 class PDBunique(object):
 
-    def __init__(self,seqsimgraph,cluster=None):
+    def __init__(self,seqsimgraph,cluster=None,outfile='pdb_uniques.pkl'):
 
         # load the graph
-        self.ssg = nx.read_gpickle(seqsimgraph)
+        self.seqsimgraph = seqsimgraph
+        self.ssg = nx.read_gpickle(self.seqsimgraph)
         self.percent = self.ssg.percent
         self.cluster_index = cluster
+        self.outfile = outfile
 
         # identify clusters
         self.clusters = list(nx.algorithms.connected_components(self.ssg))
@@ -23,22 +26,32 @@ class PDBunique(object):
 
         # number of custers
         num_cluster = len(self.clusters)
-        unique_pbds = []
+        self.unique_pbds = []
 
         # go through the list
         for icluster in range(num_cluster):
 
-            c = list(cluster[icluster])
+            print('DPBUnique -> Cluster #%03d / %03d' %(icluster,num_cluster))
+            c = list(self.clusters[icluster])
+            if len(c) > 1:
 
-            # generate the protein cluster graph
-            g = get_protein_cluster_graph(c,percent=self.percent)
+                # generate the protein cluster graph
+                g = self.get_protein_cluster_graph(c,percent=self.percent)
 
-            # extract single pdbID per edge
-            for edge in g.edges():
-                pdb_list = g.edges[edge[0],edge[1]]['txt'].split('<br>')
-                unique_pbds.append(self.select_edge_pdb(pdb_list))
+                # extract single pdbID per edge
+                for edge in g.edges():
+                    pdb_list = g.edges[edge[0],edge[1]]['txt'].split('<br>')
+                    self.unique_pbds.append(self.select_edge_pdb(pdb_list))
 
-        return unique_pbds
+            else:
+                self.unique_pbds.append(c[0])
+
+    def save(self):
+        results = {'graph':self.seqsimgraph,'percent':self.percent,'ids':self.unique_pbds}
+        f = open(self.outfile,'wb')
+        pickle.dump(results,f)
+        f.close()
+
 
 
     def select_edge_pdb(self,pdblist):
@@ -47,7 +60,7 @@ class PDBunique(object):
             return pdblist[0]
         else:
             length = []
-            for pdb in pdb_list:
+            for pdb in pdblist:
                 length.append(np.sum(self._get_pdb_length(pdb)))
             index = np.argmin(length)
             return pdblist[index]
@@ -245,10 +258,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser('PDBdatabase scraper')
 
     parser.add_argument('ssg',type = str, help='Structure Similarity graph')
-    parser.add_argument('--cluster', type = int, default = 0, help='Index of the cluster to analyze')
+    parser.add_argument('--cluster', type = int, default = None, help='Index of the cluster to analyze')
+    parser.add_argument('--outfile', type = str, default = 'pdb_unique.pkl', help='Name of the output file')
     args = parser.parse_args()
 
 
-    pdb = PDBunique(args.ssg,cluster=args.cluster)
-    graph = pdb.get_protein_cluster_graph(pdb.clusters[args.cluster],pdb.percent)
-    plot_graph(graph,'protein_cluster%d' %(args.cluster))
+    pdb = PDBunique(args.ssg,cluster=args.cluster,outfile=args.outfile)
+    if args.cluster is not None:
+        graph = pdb.get_protein_cluster_graph(pdb.clusters[args.cluster],pdb.percent)
+        plot_graph(graph,'protein_cluster%d' %(args.cluster))
+    else:
+        pdb.get_unique_entries()
+        pdb.save()

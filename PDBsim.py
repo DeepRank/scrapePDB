@@ -229,7 +229,6 @@ if __name__ == "__main__":
                              tqdm=args.tqdm)
 
         graph.get_graph(remove_self_loop = args.remove_self_loop)
-
         graph.save()
 
     else:
