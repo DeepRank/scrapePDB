@@ -121,9 +121,12 @@ class SeqSimGraph(object):
         nx.write_gpickle(self.seq_sim_graph,self.graphfile)
 
 
-    def plot_graph(self,fname):
+    def plot_graph(self,fname,offline=True):
 
-        import plotly.plotly as py
+        if offline is False:
+            import plotly.plotly as py
+        else:
+            import plotly.offline as py
         import plotly.graph_objs as go
 
         pos = nx.spring_layout(self.seq_sim_graph)
@@ -216,7 +219,8 @@ if __name__ == "__main__":
     parser.add_argument('--remove_self_loop', type=bool, default=True, help='remove self edges')
     parser.add_argument('--nproc',type = int, default=1, help='Number of concurrent procs to use')
     parser.add_argument('--tqdm',type = bool, default=True,help='use tqdm to monitor progress')
-    parser.add_argument('--load',type = str, default=None, help='Load a preexisting graph')
+    parser.add_argument('--load',type = str, default=None, help='Load a pre-existing graph')
+    parser.add_argument('--offline',action='store_true', help='Plot offline')
 
     args = parser.parse_args()
 
@@ -234,4 +238,5 @@ if __name__ == "__main__":
     else:
 
         graph = SeqSimGraph(load=args.load)
-        graph.plot_graph('simseq_4')
+        graph.plot_graph('simseq_4',offline=args.offline)
+`

@@ -25,30 +25,53 @@ def screen_pdb(pdb,dict_cond=None):
 
     # method
     check *= info['Method']['@name'] == dict_cond['method']
+    if not check:
+        reason = 'Incorrect Method : %s' %info['Method']['@name']
+        return check, reason
+
     if 'resolution' not in info:
         info['resolution'] = np.float('Inf')
+
     check *= float(info['resolution']) <= dict_cond['resolution']
+    if not check:
+        reason = 'Low Resolution (%1.2f)' %float(info['resolution'])
+        return check, reason
 
     #number of entity
     entity = _make_list(info['Entity'])
     check *= len(entity) == dict_cond['number_of_entity']
+    if not check:
+        reason = 'Wrong number of entitites %d' %len(entity)
+        return check, reason
 
     # number/type of chain
     bioAss = int(info['bioAssemblies'])
     types = _make_list(dict_cond['type'])
     for e in entity:
         check *= e['@type'] in types
+
+        if not check:
+            reason = 'Incorrect chain Type %s' %e['@type']
+            return check, reason
+
         chain = _make_list(e['Chain'])
         check *= len(chain) == bioAss
+
+        if not check:
+            reason = 'Incorrect Number of Chain %d/%d' %(len(chain),bioAss)
+            return check, reason
 
     # lentgth
     if check == 1:
         polymer = pypdb.get_all_info(pdb)['polymer']
         for p in polymer:
             l = float(p['@length'])
-            check *= (l > dict_cond['len_min'] and l < dict_cond['len_max'])
+            check *= (l >= dict_cond['len_min'] and l <= dict_cond['len_max'])
+            if not check:
+                reason =  'Incorrect chain length %d' %l
+                return check, reason
 
-    return check
+    return check, 'Entries accepted'
 
 class PDBselect(object):
 
@@ -168,10 +191,15 @@ class PDBselect(object):
     @staticmethod
     def _select_pdb(pdb,dict_cond):
         try:
-            if screen_pdb(pdb,dict_cond):
-                    return pdb
-        except :
+            check, reason = screen_pdb(pdb,dict_cond)
+            if check:
+                return pdb
+            #else:
+            #    print(pdb, reason)
+
+        except Exception as e:
             print('PDBselect -> Issue with ', pdb)
+            print(e)
             #failed_pdbs.append(pdb)
 
 if __name__ == "__main__":

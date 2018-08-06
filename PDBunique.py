@@ -8,6 +8,11 @@ from collections import namedtuple
 import pickle
 
 
+def print_id(item,id_,cond):
+    if id_ == cond:
+        print(item)
+
+
 class PDBunique(object):
 
     def __init__(self,seqsimgraph,cluster=None,outfile='pdb_uniques.pkl'):
@@ -18,6 +23,7 @@ class PDBunique(object):
         self.percent = self.ssg.percent
         self.cluster_index = cluster
         self.outfile = outfile
+        self.map = {}
 
         # identify clusters
         self.clusters = list(nx.algorithms.connected_components(self.ssg))
@@ -46,9 +52,9 @@ class PDBunique(object):
             else:
                 self.unique_pbds.append(c[0])
 
-    def save(self):
-        results = {'graph':self.seqsimgraph,'percent':self.percent,'ids':self.unique_pbds}
-        f = open(self.outfile,'wb')
+    def save(self,outfile):
+        results = {'graph':self.seqsimgraph,'percent':self.percent,'ids':self.unique_pbds,'map':self.map}
+        f = open(outfile,'wb')
         pickle.dump(results,f)
         f.close()
 
@@ -57,12 +63,14 @@ class PDBunique(object):
     def select_edge_pdb(self,pdblist):
 
         if len(pdblist) == 1:
+            self.map[pdblist[0]] = pdblist
             return pdblist[0]
         else:
             length = []
             for pdb in pdblist:
                 length.append(np.sum(self._get_pdb_length(pdb)))
             index = np.argmin(length)
+            self.map[pdblist[index]] = pdblist
             return pdblist[index]
 
     @staticmethod
@@ -79,8 +87,10 @@ class PDBunique(object):
         edges, nodes,dict_chains = {},{},{}
         Edge = namedtuple('Edge',['weight','txt'])
         Node = namedtuple('Node',['number','txt'])
-
+        pdbid = None
         for pdb in tqdm(cluster):
+
+            print_id(pdb,pdb,pdbid)
 
             # get the polymer ifos
             polymer = pypdb.get_all_info(pdb)['polymer']
@@ -100,7 +110,8 @@ class PDBunique(object):
 
             # init the names
             names = [None]*len(chain_labels)
-
+            print_id(chain,pdb,pdbid)
+            nup = 0
             # enumerate chans
             for ic,(chain,ip) in enumerate(zip(chain_labels,chain_entity)):
 
@@ -112,7 +123,7 @@ class PDBunique(object):
                 if id_chain not in dict_chains:
 
                     # use the macromolecule or polymer description name
-                    for name_option,tag in zip(['macroMolecule','polymerDescription'],['@name','@description']):
+                    for name_option,tag in zip(['polymerDescription','macroMolecule'],['@description','@name']):
                         if name_option in polymer[ip]:
                             if isinstance(polymer[ip][name_option],list):
                                 names[ic] = polymer[ip][name_option][0][tag]
@@ -120,12 +131,17 @@ class PDBunique(object):
                                 names[ic] = polymer[ip][name_option][tag]
                             break
 
+                        if names[ic] == 'Uncharacterized Protein':
+                            names[ic] = 'UP_%03d' %nup
+                            nup += 1
+
                     # add the pdb.chain to the dict
                     dict_chains[id_chain] = names[ic]
 
                     # get the seq similarity of the chain
                     cluster,_ = pypdb.get_seq_cluster_percent(id_chain,percent=percent)
                     cluster = cluster['pdbChain']
+                    print_id(cluster,pdb,pdbid)
 
                     # add all the chains with similar seq
                     # to the dict_chain {pdb.chain: prot_name}
@@ -141,14 +157,20 @@ class PDBunique(object):
 
                 # add the node to the dict of Node namedtuples
                 key = names[ic]
+                print_id(key,pdb,pdbid)
                 if key not in nodes:
-                    nodes[key] = Node(number=1,txt=pdb)
+                    nodes[key] = Node(number=1,txt=id_chain)
                 else:
                     nodes[key] = nodes[key]._replace(number=nodes[key].number+1)
-                    nodes[key] = nodes[key]._replace(txt=nodes[key].txt+'<br>'+pdb)
+                    if nodes[key].number < 35:
+                        nodes[key] = nodes[key]._replace(txt=nodes[key].txt+'<br>'+id_chain)
+                    elif nodes[key] == 35:
+                        nodes[key] = nodes[key]._replace(txt=nodes[key].txt+'<br>'+'...')
 
             # add the edge to the dict of Edge namedtuples
+            names.sort()
             key = tuple(names)
+            print_id(key,pdb,pdbid)
             if key not in edges:
                 edges[key] = Edge(weight=1,txt=pdb)
             else:
@@ -167,6 +189,18 @@ class PDBunique(object):
         return g
 
 
+    def map_find(self,pdbid):
+        for k,v in self.map.items():
+            if pdbid in v:
+                return k,v
+
+    def map_put(self,pdbid):
+
+        key,vals = self.map_find(pdbid)
+        index = self.unique_pdbs.index(key)
+        print('Replacing %s with %s' %(key,pdbid))
+        self.unique_pdbs[index] = pdbid
+
 def plot_graph(G,fname):
 
 
@@ -178,15 +212,6 @@ def plot_graph(G,fname):
     trace3_list = []
     middle_node_trace = go.Scatter(x=[],y=[],text=[],mode='markers',
                            hoverinfo='text',marker=go.Marker(opacity=0))
-
-    # edge_trace = go.Scatter(
-    #     x=[],
-    #     y=[],
-    #     line=dict(width=0.5,color='#888'),
-    #     hoverinfo='text',
-    #     mode='lines',
-    #     text = [])
-
     for edge in G.edges():
 
         trace3 = go.Scatter(x=[],y=[],text=[],mode='lines',
@@ -209,21 +234,21 @@ def plot_graph(G,fname):
         mode='markers',
         hoverinfo='text',
         marker=dict(
-            showscale=True,
+            showscale=False,
             # colorscale options
             # 'Greys' | 'Greens' | 'Bluered' | 'Hot' | 'Picnic' | 'Portland' |
             # Jet' | 'RdBu' | 'Blackbody' | 'Earth' | 'Electric' | 'YIOrRd' | 'YIGnBu'
-            colorscale='YIGnBu',
+            colorscale='Electric',
             reversescale=True,
             color=[],
-            size=10,
+            size=[],
             colorbar=dict(
                 thickness=15,
                 title='Node Connections',
                 xanchor='left',
                 titleside='right'
             ),
-            line=dict(width=2)))
+            line=dict(color='rgb(50,50,50)',width=2)))
 
     for node in G.nodes():
         x, y = pos[node]
@@ -231,6 +256,7 @@ def plot_graph(G,fname):
         node_trace['y'].append(y)
         node_trace['text'].append(''.join(node) + '<br>'+ G.nodes[node]['txt'])
         node_trace['marker']['color'].append(min(G.nodes[node]['number'],10))
+        node_trace['marker']['size'].append(min(10+G.nodes[node]['number'],50))
 
     fig = go.Figure(data=[*trace3_list, middle_node_trace, node_trace],
                  layout=go.Layout(
@@ -257,16 +283,28 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser('PDBdatabase scraper')
 
-    parser.add_argument('ssg',type = str, help='Structure Similarity graph')
+    parser.add_argument('--ssg',type = str, help='Structure Similarity graph')
     parser.add_argument('--cluster', type = int, default = None, help='Index of the cluster to analyze')
     parser.add_argument('--outfile', type = str, default = 'pdb_unique.pkl', help='Name of the output file')
+    parser.add_argument('--load', type = str,  default = None, help='Load a precomputed data file')
     args = parser.parse_args()
 
 
-    pdb = PDBunique(args.ssg,cluster=args.cluster,outfile=args.outfile)
-    if args.cluster is not None:
-        graph = pdb.get_protein_cluster_graph(pdb.clusters[args.cluster],pdb.percent)
-        plot_graph(graph,'protein_cluster%d' %(args.cluster))
+
+    if args.load is not None:
+
+        data = pickle.load(open(args.load,'rb'))
+        pdb = PDBunique(data['graph'],cluster = None,outfile=args.load)
+        pdb.percent = data['percent']
+        pdb.unique_pdbs = data['ids']
+        pdb.map = data['map']
+
     else:
-        pdb.get_unique_entries()
-        pdb.save()
+        pdb = PDBunique(args.ssg,cluster=args.cluster,outfile=args.outfile)
+
+        if args.cluster is not None:
+            graph = pdb.get_protein_cluster_graph(pdb.clusters[args.cluster],pdb.percent)
+            plot_graph(graph,'protein_cluster%d' %(args.cluster))
+        else:
+            pdb.get_unique_entries()
+            pdb.save(args.outfile)

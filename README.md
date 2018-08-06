@@ -59,6 +59,8 @@ The program outputs a `networkX` graph file where each node corresponds to a giv
 
 ![alt-text](./seqsim.gif)
 
+This graph can be visualized here : https://plot.ly/~nicoreno/20/
+
 ## PDBunique
 
 Now that we know which PDBs share a common cluster we can select unique pdbs with `PDBunique`. This program analyzes the cluster of PDB sharing a common chain and extract only the entries that are different from each other. This is achieved by computing the protein cluster graphs as shown below.
@@ -70,6 +72,9 @@ In this graph each node represent a single chain and each edge shows the interac
 ```
 ./PDBunique graph40.pkl --cluster 0
 ```
+
+
+The graph can be viewed here : https://plot.ly/~nicoreno/22/
 
 If you do not specify the cluster index the program will go through all the clusters and extract unique PDB IDs corresponding to single edges in the protein graph of each cluster. This will result in a `pickle` file containing the IDs of the unique PDBs. For example selecting the smallest PDB for each edge of the protein graph leads to the 778 following PDBs:
 
