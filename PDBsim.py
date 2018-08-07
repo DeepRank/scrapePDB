@@ -121,7 +121,7 @@ class SeqSimGraph(object):
         nx.write_gpickle(self.seq_sim_graph,self.graphfile)
 
 
-    def plot_graph(self,fname,offline=True):
+    def plot_graph(self,fname,offline=True,noedge=False,ind_cluster=None):
 
         if offline is False:
             import plotly.plotly as py
@@ -129,8 +129,13 @@ class SeqSimGraph(object):
             import plotly.offline as py
         import plotly.graph_objs as go
 
-        pos = nx.spring_layout(self.seq_sim_graph)
+
         cluster = list(nx.algorithms.connected_components(self.seq_sim_graph))
+
+        if cluster is not None:
+            self.seq_sim_graph = self.seq_sim_graph.subgraph(cluster[ind_cluster])
+
+        pos = nx.spring_layout(self.seq_sim_graph)
 
         edge_trace = go.Scattergl(
             x=[],
@@ -139,11 +144,12 @@ class SeqSimGraph(object):
             hoverinfo='none',
             mode='lines')
 
-        for edge in self.seq_sim_graph.edges():
-            x0, y0 = pos[edge[0]]
-            x1, y1 = pos[edge[1]]
-            edge_trace['x'] += [x0, x1, None]
-            edge_trace['y'] += [y0, y1, None]
+        if not noedge:
+            for edge in self.seq_sim_graph.edges():
+                x0, y0 = pos[edge[0]]
+                x1, y1 = pos[edge[1]]
+                edge_trace['x'] += [x0, x1, None]
+                edge_trace['y'] += [y0, y1, None]
 
         node_trace = go.Scattergl(
             x=[],
@@ -152,7 +158,7 @@ class SeqSimGraph(object):
             mode='markers',
             hoverinfo='text',
             marker=dict(
-                showscale=True,
+                showscale=False,
                 # colorscale options
                 # 'Greys' | 'Greens' | 'Bluered' | 'Hot' | 'Picnic' | 'Portland' |
                 # Jet' | 'RdBu' | 'Blackbody' | 'Earth' | 'Electric' | 'YIOrRd' | 'YIGnBu'
@@ -178,15 +184,6 @@ class SeqSimGraph(object):
                     index = ic
                     break
             node_trace['marker']['color'].append(index)
-
-        # adj = list(self.seq_sim_graph.adjacency())
-        # adj_list = []
-        # for a in adj:
-        #     adj_list.append(a[1].keys())
-
-        # for node, adjacencies in enumerate(adj_list):
-        #     node_trace['marker']['color'].append(len(adjacencies))
-        #     node_info = '# of connections: '+str(len(adjacencies))
 
         fig = go.Figure(data=[node_trace, edge_trace],
                      layout=go.Layout(
@@ -219,8 +216,11 @@ if __name__ == "__main__":
     parser.add_argument('--remove_self_loop', type=bool, default=True, help='remove self edges')
     parser.add_argument('--nproc',type = int, default=1, help='Number of concurrent procs to use')
     parser.add_argument('--tqdm',type = bool, default=True,help='use tqdm to monitor progress')
+
     parser.add_argument('--load',type = str, default=None, help='Load a pre-existing graph')
     parser.add_argument('--offline',action='store_true', help='Plot offline')
+    parser.add_argument('--noedge',action='store_true', help='Do not plot the edge')
+    parser.add_argument('--cluster',type = int, default = None, help='plot a single cluster')
 
     args = parser.parse_args()
 
@@ -238,5 +238,4 @@ if __name__ == "__main__":
     else:
 
         graph = SeqSimGraph(load=args.load)
-        graph.plot_graph('simseq_4',offline=args.offline)
-`
+        graph.plot_graph('simseq_4',offline=args.offline,noedge=args.noedge,ind_cluster=args.cluster)

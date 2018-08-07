@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import pypdb
+import time
 import multiprocessing
 from tqdm import tqdm
 import numpy as np
@@ -37,7 +38,7 @@ class PDBunique(object):
         # go through the list
         for icluster in range(num_cluster):
 
-            print('DPBUnique -> Cluster #%03d / %03d' %(icluster,num_cluster))
+            print('PDBUnique -> Cluster #%03d / %03d' %(icluster,num_cluster))
             c = list(self.clusters[icluster])
             if len(c) > 1:
 
@@ -92,8 +93,20 @@ class PDBunique(object):
 
             print_id(pdb,pdb,pdbid)
 
-            # get the polymer ifos
-            polymer = pypdb.get_all_info(pdb)['polymer']
+            # get the polymer infos
+            check, niter = True, 0
+            while check and niter < 10:
+                try:
+                    polymer = pypdb.get_all_info(pdb)['polymer']
+                    check = False
+                except:
+                    print('PDBUnique -> Issue getting info for :', pdb)
+                    print('PDBUnique -> Trying again in 5 sec')
+                    time.sleep(5)
+                    niter += 1
+            if check:
+                print('PDBUnique -> Entry %s ignored' %pdb)
+                continue
 
             # get the chain labels
             chain_labels, chain_entity = [], []
