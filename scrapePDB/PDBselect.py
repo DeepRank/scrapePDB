@@ -7,6 +7,7 @@ import numpy as np
 from time import time
 import pickle
 from functools import partial
+import h5py
 
 def _make_list(data):
     return [data] if not isinstance(data,list) else data
@@ -77,7 +78,7 @@ class PDBselect(object):
 
     def __init__(self, start = 0, size = -1, nproc = 1,tqdm=True,
                  method='xray', min_res = None, number_of_entity=2, types=['protein'],
-                 len_min = 50, len_max = None, outfile='pdblist.pkl',outfailedfile='problist.pkl'):
+                 len_min = 50, len_max = None, outfile='dataset.hdf5',outfailedfile='problist.pkl'):
 
         self.start = start
         self.size = size
@@ -127,7 +128,7 @@ class PDBselect(object):
         # save results
         print('PDBselect -> %04d complexes found' %(len(self.results['ids'])))
         print('PDBselect -> Saving results in :', self.outfile)
-        self.save_pkl()
+        self.save_hdf5()
 
     def save_pkl(self):
 
@@ -156,6 +157,46 @@ class PDBselect(object):
                 print('PDBselect -> Saving results in :', newname )
                 with open(newname,'wb') as f:
                     pickle.dump(self.results,f)
+
+    def save_hdf5(self):
+
+        if os.path.isfile(self.outfile):
+            print('PDBselect -> Outifle %s already exists' %self.outfile)
+            a,b = self.outfile.split('.')
+            self.outfile = a+'_new.'+b
+            print('PDBselect -> Saving results in :', self.outfile )
+
+        f5 = h5py.File(self.outfile,'w')
+        grp = f5.create_group('PDBselect')
+
+        for k in ['method']:
+            grp.create_dataset(k,data=bytes(self.results[k],'utf-8'))
+        for k in ['resolution','number_of_entity','len_min','len_max','start','size']:
+            grp.create_dataset(k,data = self.results[k])
+        for k in ['type','ids']:
+            grp.create_dataset(k,data = [i.encode('utf-8') for i in self.results[k]])
+        f5.close()
+
+    @staticmethod
+    def load_hdf5(outfile):
+
+        if not os.path.isfile(outfile):
+            raise FileNotFoundError(outfile)
+
+        f5 = h5py.File(outfile,'r')
+        if 'PDBselect' in f5:
+            grp = f5['PDBselect']
+            res = {}
+            for k in ['method','type']:
+                res[k] = grp[k].value.decode('utf-8')
+            for k in ['resolution','number_of_entity','len_min','len_max','start','size']:
+                res[k] = grp[k].value.decode('utf-8')
+            res['ids'] = [v.decode('utf-8') for v  in grp['ids'].value]
+        else:
+            res = None
+        f5.close()
+        return res
+
 
     @staticmethod
     def compatible_out(new,old):
@@ -218,7 +259,7 @@ if __name__ == "__main__":
     parser.add_argument('--types', nargs = '+', type=str, default=['protein'], help='type of polymers')
     parser.add_argument('--len_min',type = int, default=50,help='Minimum number of residues')
     parser.add_argument('--len_max',type = int, default=None,help='Maximum number of residues')
-    parser.add_argument('--outfile',type = str, default='pdblist.pkl',help='Name of the output file')
+    parser.add_argument('--hdf5',type = str, default='dataset.hdf5',help='Name of the output file')
 
 
     parser.add_argument('--tqdm',type = bool, default=True,help='use tqdm to monitor progress')
@@ -229,6 +270,6 @@ if __name__ == "__main__":
                  method=args.method, min_res=args.min_res,
                  number_of_entity=args.number_of_entity, types=args.types,
                  len_min = args.len_min, len_max = args.len_max,
-                 outfile=args.outfile)
+                 outfile=args.hdf5)
 
     pdbxt.fetch()

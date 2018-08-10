@@ -6,32 +6,26 @@ from tqdm import tqdm
 import pickle
 import multiprocessing
 from functools import partial
+import h5py
 
-class SeqSimGraph(object):
+class PDBsim(object):
 
-    def __init__(self,xtfile=None,graphfile=None,percent=95,nproc=1,tqdm=True,load=None):
+    def __init__(self,hdf5,percent=95,nproc=1,tqdm=True):
 
-        self.xtfile = xtfile
-        self.graphfile = graphfile
+        self.hdf5 = hdf5
         self.percent = percent
-
         self.nproc = nproc
         self.tqdm = tqdm
 
-        if load is not None:
-            self.seq_sim_graph = nx.read_gpickle(load)
+        if hdf5 is not None:
+            f5 = h5py.File(self.hdf5,'r')
+            self.pdbnames = [ n.decode('utf-8') for n in f5['PDBselect/ids'].value ]
 
-        # read the data
-        if self.xtfile is not None:
-            self.xtdata = pickle.load(open(self.xtfile,'rb'))
-
-            if self.graphfile is None:
-                self.graphfile = 'SeqSimGraph_' + self.xtfile.split('.')[0] + '_' + str(percent) + '.pkl'
 
     def get_graph(self, remove_self_loop = True):
 
         # get the pdbnames
-        pdb_names = self.xtdata['ids']
+        pdb_names = self.pdbnames
 
         # init the graph
         self.seq_sim_graph = nx.Graph()
@@ -120,6 +114,44 @@ class SeqSimGraph(object):
     def save(self):
         nx.write_gpickle(self.seq_sim_graph,self.graphfile)
 
+    def save_hdf5(self):
+
+        f5 = h5py.File(self.hdf5,'a')
+        grp = f5.create_group('PDBsim')
+
+        # nodes
+        data = np.array(list(self.seq_sim_graph.nodes)).astype('S')
+        grp.create_dataset('nodes',data = data)
+
+        # edges
+        data = np.array(list(self.seq_sim_graph.edges)).astype('S')
+        grp.create_dataset('edges',data=data)
+
+        # percent
+        grp.create_dataset('percent',data=self.percent)
+
+
+    def load_hdf5(self,f5=None,grp=None):
+
+        if f5 is None and grp is None:
+            raise ValueError('f5 or grp must be specified')
+
+        if f5 is not None:
+            f5 = h5py.File(h5,'r')
+            lgrp = f5['PDBsim']
+        else:
+            lgrp = grp
+
+        self.seq_sim_graph = nx.Graph()
+        nodes = lgrp['nodes'].value.astype('U')
+        self.seq_sim_graph.add_nodes_from(nodes)
+
+        edges = [tuple(e) for e in lgrp['edges'].value.astype('U')]
+        self.seq_sim_graph.add_edges_from(edges)
+
+        if f5 is not None:
+            f5.close()
+
 
     def plot_graph(self,fname,offline=True,noedge=False,ind_cluster=None):
 
@@ -132,7 +164,7 @@ class SeqSimGraph(object):
 
         cluster = list(nx.algorithms.connected_components(self.seq_sim_graph))
 
-        if cluster is not None:
+        if ind_cluster is not None:
             self.seq_sim_graph = self.seq_sim_graph.subgraph(cluster[ind_cluster])
 
         pos = nx.spring_layout(self.seq_sim_graph)
@@ -178,14 +210,20 @@ class SeqSimGraph(object):
             x, y = pos[node]
             node_trace['x'].append(x)
             node_trace['y'].append(y)
-            node_trace['text'].append(node)
+
             for ic in range(len(cluster)):
                 if node in cluster[ic]:
                     index = ic
                     break
+            node_trace['text'].append(node + '[%d]' %index)
             node_trace['marker']['color'].append(index)
 
-        fig = go.Figure(data=[node_trace, edge_trace],
+        if noedge:
+            data = [node_trace]
+        else:
+            data = [node_trace, edge_trace]
+
+        fig = go.Figure(data=data,
                      layout=go.Layout(
                         title='<br>Network graph made with Python',
                         titlefont=dict(size=16),
@@ -200,7 +238,14 @@ class SeqSimGraph(object):
                         xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
                         yaxis=dict(showgrid=False, zeroline=False, showticklabels=False)))
 
-        py.iplot(fig, filename=fname)
+
+        if not fname.endswith('.html'):
+            fname += '.html'
+
+        if offline is False:
+            py.iplot(fig, filename=fname)
+        else:
+            py.plot(fig, filename=fname)
 
 
 
@@ -210,32 +255,28 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser('Create the sequence similarity graph')
 
-    parser.add_argument('--xtfile',type = str, help='PDBXtract file')
-    parser.add_argument('--graphfile',type = str, default=None, help='sequence similarity graph file')
-    parser.add_argument('--percent',type = int, default=95, help='Sequence similarity cutoff')
+    parser.add_argument('hdf5',type = str, help='HDF5 file containing the selected pdbs')
+    parser.add_argument('--percent',type = int, default=40, help='Sequence similarity cutoff (default 40)')
     parser.add_argument('--remove_self_loop', type=bool, default=True, help='remove self edges')
     parser.add_argument('--nproc',type = int, default=1, help='Number of concurrent procs to use')
     parser.add_argument('--tqdm',type = bool, default=True,help='use tqdm to monitor progress')
 
-    parser.add_argument('--load',type = str, default=None, help='Load a pre-existing graph')
-    parser.add_argument('--offline',action='store_true', help='Plot offline')
-    parser.add_argument('--noedge',action='store_true', help='Do not plot the edge')
-    parser.add_argument('--cluster',type = int, default = None, help='plot a single cluster')
+    # parser.add_argument('--load',type = str, default=None, help='Load a pre-existing graph')
+    # parser.add_argument('--offline',action='store_true', help='Plot offline')
+    # parser.add_argument('--noedge',action='store_true', help='Do not plot the edge')
+    # parser.add_argument('--cluster',type = int, default = None, help='plot a single cluster')
 
     args = parser.parse_args()
 
+    graph = PDBsim(hdf5=args.hdf5,
+                         percent=args.percent,
+                         nproc=args.nproc,
+                         tqdm=args.tqdm)
 
-    if args.load is None:
-        graph = SeqSimGraph(xtfile=args.xtfile,
-                             graphfile=args.graphfile,
-                             percent=args.percent,
-                             nproc=args.nproc,
-                             tqdm=args.tqdm)
+    graph.get_graph(remove_self_loop = args.remove_self_loop)
+    graph.save_hdf5()
 
-        graph.get_graph(remove_self_loop = args.remove_self_loop)
-        graph.save()
+    # else:
 
-    else:
-
-        graph = SeqSimGraph(load=args.load)
-        graph.plot_graph('simseq_4',offline=args.offline,noedge=args.noedge,ind_cluster=args.cluster)
+    #     graph = SeqSimGraph(load=args.load)
+    #     graph.plot_graph('simseq_4',offline=args.offline,noedge=args.noedge,ind_cluster=args.cluster)

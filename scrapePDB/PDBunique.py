@@ -7,7 +7,7 @@ import numpy as np
 import networkx as nx
 from collections import namedtuple
 import pickle
-
+import h5py
 
 def print_id(item,id_,cond):
     if id_ == cond:
@@ -16,34 +16,50 @@ def print_id(item,id_,cond):
 
 class PDBunique(object):
 
-    def __init__(self,seqsimgraph,cluster=None,outfile='pdb_uniques.pkl'):
+    def __init__(self,hdf5):
 
         # load the graph
-        self.seqsimgraph = seqsimgraph
-        self.ssg = nx.read_gpickle(self.seqsimgraph)
-        self.percent = self.ssg.percent
-        self.cluster_index = cluster
-        self.outfile = outfile
+        self.hdf5 = hdf5
+        self.ssg, self.percent = self.load_seq_sim_graph()
         self.map = {}
 
         # identify clusters
         self.clusters = list(nx.algorithms.connected_components(self.ssg))
 
+
+    def load_seq_sim_graph(self):
+
+        f5 = h5py.File(self.hdf5,'r')
+        grp = f5['PDBsim']
+        nodes = grp['nodes'].value.astype('U')
+        edges = [ tuple(e) for e in grp['edges'].value.astype('U') ]
+
+        ssg = nx.Graph()
+        ssg.add_nodes_from(nodes)
+        ssg.add_edges_from(edges)
+        percent = grp['percent'].value
+
+        return ssg, percent
+
     def get_unique_entries(self):
 
         # number of custers
         num_cluster = len(self.clusters)
+
         self.unique_pbds = []
+        self.prot_graphs = []
 
         # go through the list
         for icluster in range(num_cluster):
 
             print('PDBUnique -> Cluster #%03d / %03d' %(icluster,num_cluster))
             c = list(self.clusters[icluster])
+
             if len(c) > 1:
 
                 # generate the protein cluster graph
                 g = self.get_protein_cluster_graph(c,percent=self.percent)
+                self.prot_graphs.append(g)
 
                 # extract single pdbID per edge
                 for edge in g.edges():
@@ -51,15 +67,51 @@ class PDBunique(object):
                     self.unique_pbds.append(self.select_edge_pdb(pdb_list))
 
             else:
+                self.prot_graphs.append(None)
                 self.unique_pbds.append(c[0])
+
+
+    def save_hdf5(self):
+
+        f5 = h5py.File(self.hdf5,'a')
+        grp = f5.create_group('PDBunique')
+        grp.create_dataset('ids',data=np.array(self.unique_pbds).astype('S'))
+
+        subgrp = grp.create_group('map')
+        for k in list(self.map.keys()):
+            data = np.array(self.map[k]).astype('S')
+            subgrp.create_dataset('map_'+k,data=data)
+
+        ic = 0
+        for g,c in zip(self.prot_graphs,self.clusters):
+
+            subgrp = grp.create_group('cluster_%03d' %ic)
+            ic += 1
+
+            subgrp.create_dataset('pdbids',data=np.array(list(c)).astype('S'))
+            if g is not None:
+
+                # nodes
+                data = []
+                for n,d in g.nodes.data():
+                    data.append([n,d['number'],d['txt']])
+                data = np.array(data).astype('S')
+                subgrp.create_dataset('nodes',data = data)
+
+                # nodes with data
+                data = []
+                for e1,e2,d in list(g.edges.data()):
+                    data.append([e1,e2,d['weight'],d['txt']])
+                data = np.array(data).astype('S')
+                subgrp.create_dataset('edges',data = data)
+
+        f5.close()
 
     def save(self,outfile):
         results = {'graph':self.seqsimgraph,'percent':self.percent,'ids':self.unique_pbds,'map':self.map}
         f = open(outfile,'wb')
         pickle.dump(results,f)
         f.close()
-
-
 
     def select_edge_pdb(self,pdblist):
 
@@ -83,7 +135,7 @@ class PDBunique(object):
         return l
 
     @staticmethod
-    def get_protein_cluster_graph(cluster,percent=95):
+    def get_protein_cluster_graph(cluster,percent):
 
         edges, nodes,dict_chains = {},{},{}
         Edge = namedtuple('Edge',['weight','txt'])
@@ -214,10 +266,48 @@ class PDBunique(object):
         print('Replacing %s with %s' %(key,pdbid))
         self.unique_pdbs[index] = pdbid
 
-def plot_graph(G,fname):
+
+def load_prot_graph(f5name=None,index_cluster=None,grp=None):
+
+    if f5name is None and grp is None:
+        raise ValueError('f5name or grp must be specified')
+
+    if f5name is not None:
+        f5 = h5py.File(f5,'r')
+        lgrp = f5['PDBunique/cluster_%03d' %index_cluster]
+    else:
+        lgrp = grp
+
+    g = nx.Graph()
+    nodes = grp['nodes'].value
+    edges = grp['edges'].value
+    #edges = [ tuple(e) for e in grp['edges'].value.astype('U') ]
+
+    for n in nodes:
+        node_id, number,txt = n
+        node_id = node_id.decode('utf-8')
+        g.add_node(node_id)
+        g.nodes[node_id]['number'] = int(number.decode('utf-8'))
+        g.nodes[node_id]['txt'] = txt.decode('utf-8')
+
+    for e in edges:
+        e1, e2, w, txt = e
+        e1 = e1.decode('utf-8')
+        e2 = e2.decode('utf-8')
+        g.add_edge(e1,e2)
+        g.edges[e1,e2]['weight'] = int(w.decode('utf-8'))
+        g.edges[e1,e2]['txt'] = txt.decode('utf-8')
+
+    return g
 
 
-    import plotly.plotly as py
+def plot_graph(G,fname,offline=False):
+
+
+    if offline is False:
+        import plotly.plotly as py
+    else:
+        import plotly.offline as py
     import plotly.graph_objs as go
 
     pos = nx.spring_layout(G)
@@ -286,7 +376,13 @@ def plot_graph(G,fname):
                     xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
                     yaxis=dict(showgrid=False, zeroline=False, showticklabels=False)))
 
-    py.iplot(fig, filename=fname)
+    if not fname.endswith('.html'):
+        fname += '.html'
+
+    if offline is False:
+        py.iplot(fig, filename=fname)
+    else:
+        py.plot(fig, filename=fname)
 
 
 
@@ -295,29 +391,33 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser('PDBdatabase scraper')
+    parser.add_argument('hdf5',type = str, help='HDF5 file where the dataset is stored')
 
-    parser.add_argument('--ssg',type = str, help='Structure Similarity graph')
-    parser.add_argument('--cluster', type = int, default = None, help='Index of the cluster to analyze')
-    parser.add_argument('--outfile', type = str, default = 'pdb_unique.pkl', help='Name of the output file')
-    parser.add_argument('--load', type = str,  default = None, help='Load a precomputed data file')
+    # parser.add_argument('--ssg',type = str, help='Structure Similarity graph')
+    # parser.add_argument('--cluster', type = int, default = None, help='Index of the cluster to analyze')
+    # parser.add_argument('--outfile', type = str, default = 'pdb_unique.pkl', help='Name of the output file')
+    # parser.add_argument('--load', type = str,  default = None, help='Load a precomputed data file')
     args = parser.parse_args()
 
+    pdb = PDBunique(args.hdf5)
+    pdb.get_unique_entries()
+    pdb.save_hdf5()
 
 
-    if args.load is not None:
+    # if args.load is not None:
 
-        data = pickle.load(open(args.load,'rb'))
-        pdb = PDBunique(data['graph'],cluster = None,outfile=args.load)
-        pdb.percent = data['percent']
-        pdb.unique_pdbs = data['ids']
-        pdb.map = data['map']
+    #     data = pickle.load(open(args.load,'rb'))
+    #     pdb = PDBunique(data['graph'],cluster = None,outfile=args.load)
+    #     pdb.percent = data['percent']
+    #     pdb.unique_pdbs = data['ids']
+    #     pdb.map = data['map']
 
-    else:
-        pdb = PDBunique(args.ssg,cluster=args.cluster,outfile=args.outfile)
+    # else:
+    #     pdb = PDBunique(args.ssg,cluster=args.cluster,outfile=args.outfile)
 
-        if args.cluster is not None:
-            graph = pdb.get_protein_cluster_graph(pdb.clusters[args.cluster],pdb.percent)
-            plot_graph(graph,'protein_cluster%d' %(args.cluster))
-        else:
-            pdb.get_unique_entries()
-            pdb.save(args.outfile)
+    #     if args.cluster is not None:
+    #         graph = pdb.get_protein_cluster_graph(pdb.clusters[args.cluster],pdb.percent)
+    #         plot_graph(graph,'protein_cluster%d' %(args.cluster))
+    #     else:
+    #         pdb.get_unique_entries()
+    #         pdb.save(args.outfile)

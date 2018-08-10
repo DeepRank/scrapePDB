@@ -6,13 +6,15 @@ import multiprocessing
 from functools import partial
 from tqdm import tqdm
 import os
+import hdf5
 
 class PDBdownload(object):
 
-    def __init__(self,pklfile,outdir='./',nproc=1):
+    def __init__(self,hdf5,outdir='./',nproc=1):
 
-        data = pickle.load(open(pklfile,'rb'))
-        self.pdblist = data['ids']
+        f5 = h5py.File(hdf5)
+        grp = f5['PDBunique']
+        self.pdblist = [v.decode('utf-8') for v in grp['ids'].value]
         self.outdir = outdir
         self.nproc = nproc
 
@@ -55,10 +57,10 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser('PDBdatabase scraper')
-    parser.add_argument('pklfile',type = str, help='Pickle file containing the pdb ids')
+    parser.add_argument('hdf5',type = str, help='Pickle file containing the pdb ids')
     parser.add_argument('--outdir',type = str, default='./dataset/', help='Output directory for the dataset')
     parser.add_argument('--nproc',type = int, default=1, help='Number of procs')
     args = parser.parse_args()
 
-    pdb = PDBdownload(args.pklfile,outdir=args.outdir,nproc=args.nproc)
+    pdb = PDBdownload(args.hdf5,outdir=args.outdir,nproc=args.nproc)
     pdb.download()
