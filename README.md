@@ -100,5 +100,5 @@ The unique PDB Ids are then stored in `dataset.hdf5`, in the PDBunique folder an
 We just need now to download the PDBs we have selected. This can be done via
 
 ```
-./PDBdownload pdb_unique.pkl --outdir ./dataset/
+./PDBdownload dataset.hdf5 --outdir ./dataset/
 ```
