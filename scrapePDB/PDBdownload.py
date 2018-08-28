@@ -6,7 +6,7 @@ import multiprocessing
 from functools import partial
 from tqdm import tqdm
 import os
-import hdf5
+import h5py
 
 class PDBdownload(object):
 
