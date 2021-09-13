@@ -1,0 +1,13 @@
+numpy>=1.13
+pypdb
+tqdm
+networkx
+h5py
+
+[test]
+nose
+coverage
+pytest
+pytest-cov
+codacy-coverage
+coveralls

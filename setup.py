@@ -10,12 +10,14 @@ setup(
 
 
     install_requires=[
-        'numpy >= 1.13'],
-        #'tarfiles',
-        #'pickle'],
+        'numpy >= 1.13',
+        'pypdb',
+        'tqdm',
+        'networkx',
+        'h5py'],
 
-    extras_require= {
+    extras_require={
         'test': ['nose', 'coverage', 'pytest',
-                 'pytest-cov','codacy-coverage','coveralls'],
+                 'pytest-cov', 'codacy-coverage', 'coveralls'],
     }
 )

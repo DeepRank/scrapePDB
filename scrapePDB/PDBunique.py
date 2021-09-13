@@ -9,14 +9,15 @@ from collections import namedtuple
 import pickle
 import h5py
 
-def print_id(item,id_,cond):
+
+def print_id(item, id_, cond):
     if id_ == cond:
         print(item)
 
 
 class PDBunique(object):
 
-    def __init__(self,hdf5):
+    def __init__(self, hdf5):
 
         # load the graph
         self.hdf5 = hdf5
@@ -24,15 +25,15 @@ class PDBunique(object):
         self.map = {}
 
         # identify clusters
-        self.clusters = list(nx.algorithms.connected_components(self.ssg))
-
+        self.clusters = list(
+            nx.algorithms.connected_components(self.ssg))
 
     def load_seq_sim_graph(self):
 
-        f5 = h5py.File(self.hdf5,'r')
+        f5 = h5py.File(self.hdf5, 'r')
         grp = f5['PDBsim']
         nodes = grp['nodes'].value.astype('U')
-        edges = [ tuple(e) for e in grp['edges'].value.astype('U') ]
+        edges = [tuple(e) for e in grp['edges'].value.astype('U')]
 
         ssg = nx.Graph()
         ssg.add_nodes_from(nodes)
@@ -41,7 +42,7 @@ class PDBunique(object):
 
         return ssg, percent
 
-    def get_unique_entries(self,start,end):
+    def get_unique_entries(self, start, end):
 
         # number of custers
         num_cluster = len(self.clusters)
@@ -51,82 +52,91 @@ class PDBunique(object):
         #self.unique_pbds = []
         #self.prot_graphs = []
 
-        f5 = h5py.File(self.hdf5,'a')
+        f5 = h5py.File(self.hdf5, 'a')
         grp = f5.require_group('PDBunique')
 
         # go through the list
-        for icluster in range(start,num_cluster):
+        for icluster in range(start, num_cluster):
 
-            print('PDBUnique -> Cluster #%04d / %04d' %(icluster,num_cluster))
+            print('PDBUnique -> Cluster #%04d / %04d' %
+                  (icluster, num_cluster))
             c = list(self.clusters[icluster])
 
-            subgrp_name = 'cluster_%04d' %icluster
+            subgrp_name = 'cluster_%04d' % icluster
             if subgrp_name not in grp:
 
                 if len(c) > 1:
 
                     # generate the protein cluster graph
-                    g = self.get_protein_cluster_graph(c,percent=self.percent)
-                    #self.prot_graphs.append(g)
+                    g = self.get_protein_cluster_graph(
+                        c, percent=self.percent)
+                    # self.prot_graphs.append(g)
 
                     # extract single pdbID per edge
                     unique_pdbs = []
                     for edge in g.edges():
-                        pdb_list = g.edges[edge[0],edge[1]]['txt'].split('<br>')
-                        unique_pdbs.append(self.select_edge_pdb(pdb_list))
+                        pdb_list = g.edges[edge[0],
+                                           edge[1]]['txt'].split('<br>')
+                        unique_pdbs.append(
+                            self.select_edge_pdb(pdb_list))
 
                 else:
-                    #self.prot_graphs.append(None)
+                    # self.prot_graphs.append(None)
                     unique_pdbs = c
                     g = None
 
                 subgrp = grp.create_group(subgrp_name)
-                self._save_cluster(subgrp,g,c,unique_pdbs)
+                self._save_cluster(subgrp, g, c, unique_pdbs)
 
         f5.close()
 
     @staticmethod
-    def _save_cluster(subgrp,graph,cluster,unique):
+    def _save_cluster(subgrp, graph, cluster, unique):
 
-        subgrp.create_dataset('unique',data=np.array(unique).astype('S'))
-        subgrp.create_dataset('pdbids',data=np.array(list(cluster)).astype('S'))
-        if isinstance(graph,nx.Graph):
+        subgrp.create_dataset(
+            'unique', data=np.array(unique).astype('S'))
+        subgrp.create_dataset(
+            'pdbids', data=np.array(list(cluster)).astype('S'))
+        if isinstance(graph, nx.Graph):
 
             # nodes
             data = []
-            for n,d in graph.nodes.data():
-                data.append([n,d['number'],d['txt']])
+            for n, d in graph.nodes.data():
+                data.append([n, d['number'], d['txt']])
             data = np.array(data).astype('S')
-            subgrp.create_dataset('nodes',data = data)
+            subgrp.create_dataset('nodes', data=data)
 
             # nodes with data
             data = []
-            for e1,e2,d in list(graph.edges.data()):
-                data.append([e1,e2,d['weight'],d['txt']])
+            for e1, e2, d in list(graph.edges.data()):
+                data.append([e1, e2, d['weight'], d['txt']])
             data = np.array(data).astype('S')
-            subgrp.create_dataset('edges',data = data)
+            subgrp.create_dataset('edges', data=data)
 
-    def get_unique_list(self,store=False):
+    def get_unique_list(self, store=False):
 
-        f5 = h5py.File(self.hdf5,'a')
+        f5 = h5py.File(self.hdf5, 'a')
         grp = f5['PDBunique']
-        subgroup_list = filter(lambda x: x.startswith('cluster_'), list(grp.keys()))
+        subgroup_list = filter(lambda x: x.startswith(
+            'cluster_'), list(grp.keys()))
 
         uniques = []
         for sub in subgroup_list:
             uniques += list(grp[sub+'/unique'].value.astype('U'))
         if store:
-            grp.create_dataset('ids',data=np.array(uniques).astype('S'))
+            grp.create_dataset(
+                'ids', data=np.array(uniques).astype('S'))
         f5.close()
         return uniques
 
-    def save(self,outfile):
-        results = {'graph':self.seqsimgraph,'percent':self.percent,'ids':self.unique_pbds,'map':self.map}
-        f = open(outfile,'wb')
-        pickle.dump(results,f)
+    def save(self, outfile):
+        results = {'graph': self.seqsimgraph, 'percent': self.percent,
+                   'ids': self.unique_pbds, 'map': self.map}
+        f = open(outfile, 'wb')
+        pickle.dump(results, f)
         f.close()
 
-    def select_edge_pdb(self,pdblist):
+    def select_edge_pdb(self, pdblist):
 
         if len(pdblist) == 1:
             self.map[pdblist[0]] = pdblist
@@ -148,15 +158,15 @@ class PDBunique(object):
         return l
 
     @staticmethod
-    def get_protein_cluster_graph(cluster,percent):
+    def get_protein_cluster_graph(cluster, percent):
 
-        edges, nodes,dict_chains = {},{},{}
-        Edge = namedtuple('Edge',['weight','txt'])
-        Node = namedtuple('Node',['number','txt'])
+        edges, nodes, dict_chains = {}, {}, {}
+        Edge = namedtuple('Edge', ['weight', 'txt'])
+        Node = namedtuple('Node', ['number', 'txt'])
         pdbid = None
         for pdb in tqdm(cluster):
 
-            print_id(pdb,pdb,pdbid)
+            print_id(pdb, pdb, pdbid)
 
             # get the polymer infos
             check, niter = True, 0
@@ -170,17 +180,17 @@ class PDBunique(object):
                     time.sleep(5)
                     niter += 1
             if check:
-                print('PDBUnique -> Entry %s ignored' %pdb)
+                print('PDBUnique -> Entry %s ignored' % pdb)
                 continue
 
             # get the chain labels
             chain_labels, chain_entity = [], []
-            for ip,p in enumerate(polymer):
+            for ip, p in enumerate(polymer):
 
                 chain = p['chain']
 
                 # only conserve the first chain
-                if isinstance(chain,list):
+                if isinstance(chain, list):
                     chain = chain[0]
 
                 chain_labels.append(chain['@id'])
@@ -188,10 +198,10 @@ class PDBunique(object):
 
             # init the names
             names = [None]*len(chain_labels)
-            print_id(chain,pdb,pdbid)
+            print_id(chain, pdb, pdbid)
             nup = 0
             # enumerate chans
-            for ic,(chain,ip) in enumerate(zip(chain_labels,chain_entity)):
+            for ic, (chain, ip) in enumerate(zip(chain_labels, chain_entity)):
 
                 # pdb.chain ID
                 id_chain = pdb+'.'+chain
@@ -201,16 +211,16 @@ class PDBunique(object):
                 if id_chain not in dict_chains:
 
                     # use the macromolecule or polymer description name
-                    for name_option,tag in zip(['polymerDescription','macroMolecule'],['@description','@name']):
+                    for name_option, tag in zip(['polymerDescription', 'macroMolecule'], ['@description', '@name']):
                         if name_option in polymer[ip]:
-                            if isinstance(polymer[ip][name_option],list):
+                            if isinstance(polymer[ip][name_option], list):
                                 names[ic] = polymer[ip][name_option][0][tag]
                             else:
                                 names[ic] = polymer[ip][name_option][tag]
                             break
 
                         if names[ic] == 'Uncharacterized Protein':
-                            names[ic] = 'UP_%03d' %nup
+                            names[ic] = 'UP_%03d' % nup
                             nup += 1
 
                     # add the pdb.chain to the dict
@@ -220,25 +230,28 @@ class PDBunique(object):
                     check, niter = True, 0
                     while check and niter < 10:
                         try:
-                            cluster,_ = pypdb.get_seq_cluster_percent(id_chain,percent=percent)
+                            cluster, _ = pypdb.get_seq_cluster_percent(
+                                id_chain, percent=percent)
                             check = False
                         except:
-                            print('PDBUnique -> Issue getting cluster for :', id_chain)
+                            print(
+                                'PDBUnique -> Issue getting cluster for :', id_chain)
                             print('PDBUnique -> Trying again in 5 sec')
                             time.sleep(5)
                             niter += 1
 
                     if check:
-                        print('PDBUnique -> Entry %s ignored' %id_chain)
+                        print('PDBUnique -> Entry %s ignored' %
+                              id_chain)
                         cluster = []
                     else:
                         cluster = cluster['pdbChain']
-                    print_id(cluster,pdb,pdbid)
+                    print_id(cluster, pdb, pdbid)
 
                     # add all the chains with similar seq
                     # to the dict_chain {pdb.chain: prot_name}
-                    if len(cluster)>0:
-                        if not isinstance(cluster,list):
+                    if len(cluster) > 0:
+                        if not isinstance(cluster, list):
                             cluster = [cluster]
                         for n in cluster:
                             dict_chains[n['@name']] = names[ic]
@@ -249,59 +262,65 @@ class PDBunique(object):
 
                 # add the node to the dict of Node namedtuples
                 key = names[ic]
-                print_id(key,pdb,pdbid)
+                print_id(key, pdb, pdbid)
                 if key not in nodes:
-                    nodes[key] = Node(number=1,txt=id_chain)
+                    nodes[key] = Node(number=1, txt=id_chain)
                 else:
-                    nodes[key] = nodes[key]._replace(number=nodes[key].number+1)
+                    nodes[key] = nodes[key]._replace(
+                        number=nodes[key].number+1)
                     if nodes[key].number < 35:
-                        nodes[key] = nodes[key]._replace(txt=nodes[key].txt+'<br>'+id_chain)
+                        nodes[key] = nodes[key]._replace(
+                            txt=nodes[key].txt+'<br>'+id_chain)
                     elif nodes[key] == 35:
-                        nodes[key] = nodes[key]._replace(txt=nodes[key].txt+'<br>'+'...')
+                        nodes[key] = nodes[key]._replace(
+                            txt=nodes[key].txt+'<br>'+'...')
 
             # add the edge to the dict of Edge namedtuples
             names.sort()
             key = tuple(names)
-            print_id(key,pdb,pdbid)
+            print_id(key, pdb, pdbid)
             if key not in edges:
-                edges[key] = Edge(weight=1,txt=pdb)
+                edges[key] = Edge(weight=1, txt=pdb)
             else:
-                edges[key] = edges[key]._replace(weight=edges[key].weight+1)
-                edges[key] = edges[key]._replace(txt= edges[key].txt + '<br>' + pdb)
+                edges[key] = edges[key]._replace(
+                    weight=edges[key].weight+1)
+                edges[key] = edges[key]._replace(
+                    txt=edges[key].txt + '<br>' + pdb)
 
         # Create the graph
         g = nx.Graph()
 
         for node_key, node_val in nodes.items():
-            g.add_node(node_key,number=node_val.number,txt=node_val.txt)
+            g.add_node(node_key, number=node_val.number,
+                       txt=node_val.txt)
 
         for edge_key, edge_val in edges.items():
-            g.add_edge(edge_key[0],edge_key[1],weight=edge_val.weight,txt=edge_val.txt)
+            g.add_edge(edge_key[0], edge_key[1],
+                       weight=edge_val.weight, txt=edge_val.txt)
 
         return g
 
-
-    def map_find(self,pdbid):
-        for k,v in self.map.items():
+    def map_find(self, pdbid):
+        for k, v in self.map.items():
             if pdbid in v:
-                return k,v
+                return k, v
 
-    def map_put(self,pdbid):
+    def map_put(self, pdbid):
 
-        key,vals = self.map_find(pdbid)
+        key, vals = self.map_find(pdbid)
         index = self.unique_pdbs.index(key)
-        print('Replacing %s with %s' %(key,pdbid))
+        print('Replacing %s with %s' % (key, pdbid))
         self.unique_pdbs[index] = pdbid
 
 
-def load_prot_graph(f5name=None,index_cluster=None,grp=None):
+def load_prot_graph(f5name=None, index_cluster=None, grp=None):
 
     if f5name is None and grp is None:
         raise ValueError('f5name or grp must be specified')
 
     if f5name is not None:
-        f5 = h5py.File(f5,'r')
-        lgrp = f5['PDBunique/cluster_%03d' %index_cluster]
+        f5 = h5py.File(f5, 'r')
+        lgrp = f5['PDBunique/cluster_%03d' % index_cluster]
     else:
         lgrp = grp
 
@@ -311,7 +330,7 @@ def load_prot_graph(f5name=None,index_cluster=None,grp=None):
     #edges = [ tuple(e) for e in grp['edges'].value.astype('U') ]
 
     for n in nodes:
-        node_id, number,txt = n
+        node_id, number, txt = n
         node_id = node_id.decode('utf-8')
         g.add_node(node_id)
         g.nodes[node_id]['number'] = int(number.decode('utf-8'))
@@ -321,15 +340,14 @@ def load_prot_graph(f5name=None,index_cluster=None,grp=None):
         e1, e2, w, txt = e
         e1 = e1.decode('utf-8')
         e2 = e2.decode('utf-8')
-        g.add_edge(e1,e2)
-        g.edges[e1,e2]['weight'] = int(w.decode('utf-8'))
-        g.edges[e1,e2]['txt'] = txt.decode('utf-8')
+        g.add_edge(e1, e2)
+        g.edges[e1, e2]['weight'] = int(w.decode('utf-8'))
+        g.edges[e1, e2]['txt'] = txt.decode('utf-8')
 
     return g
 
 
-def plot_graph(G,fname,offline=False):
-
+def plot_graph(G, fname, offline=False):
 
     if offline is False:
         import plotly.plotly as py
@@ -340,12 +358,12 @@ def plot_graph(G,fname,offline=False):
     pos = nx.spring_layout(G)
 
     trace3_list = []
-    middle_node_trace = go.Scatter(x=[],y=[],text=[],mode='markers',
-                           hoverinfo='text',marker=go.Marker(opacity=0))
+    middle_node_trace = go.Scatter(x=[], y=[], text=[], mode='markers',
+                                   hoverinfo='text', marker=go.Marker(opacity=0))
     for edge in G.edges():
 
-        trace3 = go.Scatter(x=[],y=[],text=[],mode='lines',
-                            line=go.Line(color='rgb(210,210,210)',width = min(G.edges[edge[0],edge[1]]['weight'],25)))
+        trace3 = go.Scatter(x=[], y=[], text=[], mode='lines',
+                            line=go.Line(color='rgb(210,210,210)', width=min(G.edges[edge[0], edge[1]]['weight'], 25)))
 
         x0, y0 = pos[edge[0]]
         x1, y1 = pos[edge[1]]
@@ -355,7 +373,8 @@ def plot_graph(G,fname,offline=False):
 
         middle_node_trace['x'].append((x0+x1)/2)
         middle_node_trace['y'].append((y0+y1)/2)
-        middle_node_trace['text'].append(G.edges[edge[0],edge[1]]['txt'])
+        middle_node_trace['text'].append(
+            G.edges[edge[0], edge[1]]['txt'])
 
     node_trace = go.Scatter(
         x=[],
@@ -378,29 +397,33 @@ def plot_graph(G,fname,offline=False):
                 xanchor='left',
                 titleside='right'
             ),
-            line=dict(color='rgb(50,50,50)',width=2)))
+            line=dict(color='rgb(50,50,50)', width=2)))
 
     for node in G.nodes():
         x, y = pos[node]
         node_trace['x'].append(x)
         node_trace['y'].append(y)
-        node_trace['text'].append(''.join(node) + '<br>'+ G.nodes[node]['txt'])
-        node_trace['marker']['color'].append(min(G.nodes[node]['number'],10))
-        node_trace['marker']['size'].append(min(10+G.nodes[node]['number'],25))
+        node_trace['text'].append(
+            ''.join(node) + '<br>' + G.nodes[node]['txt'])
+        node_trace['marker']['color'].append(
+            min(G.nodes[node]['number'], 10))
+        node_trace['marker']['size'].append(
+            min(10+G.nodes[node]['number'], 25))
 
     fig = go.Figure(data=[*trace3_list, middle_node_trace, node_trace],
-                 layout=go.Layout(
+                    layout=go.Layout(
                     title='<br>Network graph made with Python',
                     titlefont=dict(size=16),
                     showlegend=False,
                     hovermode='closest',
-                    margin=dict(b=20,l=5,r=5,t=40),
-                    annotations=[ dict(
+                    margin=dict(b=20, l=5, r=5, t=40),
+                    annotations=[dict(
                         text="Python code: <a href='https://plot.ly/ipython-notebooks/network-graphs/'> https://plot.ly/ipython-notebooks/network-graphs/</a>",
                         showarrow=False,
                         xref="paper", yref="paper",
-                        x=0.005, y=-0.002 ) ],
-                    xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                        x=0.005, y=-0.002)],
+                    xaxis=dict(showgrid=False, zeroline=False,
+                               showticklabels=False),
                     yaxis=dict(showgrid=False, zeroline=False, showticklabels=False)))
 
     if not fname.endswith('.html'):
@@ -412,21 +435,22 @@ def plot_graph(G,fname,offline=False):
         py.plot(fig, filename=fname)
 
 
-
 if __name__ == "__main__":
 
     import argparse
 
     parser = argparse.ArgumentParser('PDBdatabase scraper')
-    parser.add_argument('hdf5',type = str, help='HDF5 file where the dataset is stored')
-    parser.add_argument('-s','--start', type = int, default = 0, help='Index of the first clustr to analyze')
-    parser.add_argument('-e','--end', type = int, default = -1, help='Index of the last cluster')
-    parser.add_argument('--load', action="store_true", help='Only load the hdf5')
+    parser.add_argument(
+        'hdf5', type=str, help='HDF5 file where the dataset is stored')
+    parser.add_argument('-s', '--start', type=int, default=0,
+                        help='Index of the first clustr to analyze')
+    parser.add_argument('-e', '--end', type=int,
+                        default=-1, help='Index of the last cluster')
+    parser.add_argument('--load', action="store_true",
+                        help='Only load the hdf5')
 
     args = parser.parse_args()
 
     pdb = PDBunique(args.hdf5)
     if not args.load:
-        pdb.get_unique_entries(args.start,args.end)
-
-
+        pdb.get_unique_entries(args.start, args.end)
