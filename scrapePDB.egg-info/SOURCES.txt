@@ -1,0 +1,13 @@
+README.md
+setup.py
+scrapePDB/PDBProcess.py
+scrapePDB/PDBdownload.py
+scrapePDB/PDBselect.py
+scrapePDB/PDBsim.py
+scrapePDB/PDBunique.py
+scrapePDB/__init__.py
+scrapePDB.egg-info/PKG-INFO
+scrapePDB.egg-info/SOURCES.txt
+scrapePDB.egg-info/dependency_links.txt
+scrapePDB.egg-info/requires.txt
+scrapePDB.egg-info/top_level.txt

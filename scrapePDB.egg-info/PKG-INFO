@@ -1,0 +1,9 @@
+Metadata-Version: 2.1
+Name: scrapePDB
+Version: 0.0
+Summary: Scrape the DPB data base to create cutom dataset
+Home-page: https://github.com/DeepRank/scrapePDB
+License: UNKNOWN
+Description: UNKNOWN
+Platform: UNKNOWN
+Provides-Extra: test
